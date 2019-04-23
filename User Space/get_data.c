@@ -36,6 +36,7 @@ int main (){
 		int i;
 		// Transfer data character by character
 		while(i = (read(bl_file,c,1)) != 0){
+			printf("%c\n",c);
 			write(car_file,c,1);
 		}
 
