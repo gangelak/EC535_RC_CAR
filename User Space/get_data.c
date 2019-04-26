@@ -1,10 +1,15 @@
 #include <stdio.h> 
 #include <stdlib.h>
+#include <string.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <signal.h>
 
+int bl_file;
+int car_file;
+void sighandler(int);
 
-
-int main (){
-	int bl_file,car_file;
+int main (int argc, char *argv){
 	/*
 	 * Take data from the rfcomm (bluetooth) file and pass them
 	 * to the car_kernel module
@@ -15,34 +20,77 @@ int main (){
 	 *
 	 * */
 	
-	char *c;
+	struct sigaction action;
+	
+	memset(&action,0,sizeof(action));
+	action.sa_flags = SA_SIGINFO;
+	action.sa_handler = sighandler;
+	sigemptyset(&action.sa_mask);
+	sigaction(SIGINT, &action, NULL);
+
+
+	char line[256];
+	
+	bl_file = open("/dev/rfcomm0",O_RDONLY);
+	
+	if (bl_file == -1){
+		printf("No bluetooth connection\n");
+		continue;
+	}
+	
+	// We can receive data from bluetooth. Pass them to the car kernel module
+	car_file = open("/dev/mycar",O_RDWR);
+	
+	if (car_file == -1){
+		printf("Something is wrong with the car kernel module\n");
+		return 1;
+	}
 
 	while (1){
 		
-		// Open the rfcomm file. Continue if not there
-		bl_file = open("/dev/rfcomm0","r");
+		if( access( "/dev/rfcomm0", F_OK ) == -1 ) {
+			bl_file = open("/dev/rfcomm0",O_RDONLY);
+			
+			if (bl_file == -1){
+				printf("No bluetooth connection\n");
+				continue;
+			}
+    			
+		}
 		
-		if (!bl_file)
-			continue;
-		
-		// We can receive data from bluetooth. Pass them to the car kernel module
-		car_file = open("/dev/my_car","w");
-		
-		if (!car_file){
-			printf("Something is wrong with the car kernel module\n");
-			return 1;
+		if( access( "/dev/mycar", F_OK ) == -1 ) {
+			bl_file = open("/dev/mycar",O_RDONLY);
+			
+			if (bl_file == -1){
+				printf("Something is wrong with the car kernel module\n");
+				continue;
+			}
+    			
 		}
 		
 		int i;
 		// Transfer data character by character
-		while(i = (read(bl_file,c,1)) != 0){
-			printf("%c\n",c);
-			write(car_file,c,1);
+		memset(line,'\0',256);
+		while(i = (read(bl_file,line,256)) != 0){
+			//printf("%c\n",line[0]);
+			write(car_file,line,1);
+			memset(line,'\0',256);
 		}
 
-		close(bl_file);
-		close(car_file);
 	
 	}
+	
 
+	close(car_file);
+	close(bl_file);
+	return 0;
+}
+	
+void sighandler(int signo){
+	
+	if (signo == SIGINT){
+		close(bl_file);
+		close(car_file);
+		exit(0);
+	}
 }
