@@ -67,8 +67,8 @@ int cache_right = 0;
 int cache_left = 0;
 int timer_running = 0;
 int l=0,r=0;
-//static struct timer_list * irq_timer;
-//static struct timer_list * delay_timer;
+static struct timer_list * irq_timer;
+static struct timer_list * delay_timer;
 #define LED0 28
 #define LED1 29
 #define LED2 30
@@ -239,7 +239,7 @@ static ssize_t mycar_write(struct file *filp, const char *buf,
 		printk(KERN_INFO "Copy from user failed\n");
 		return -EFAULT;
 	}
-#if 1
+#if 0
 	printk(KERN_INFO "write %s\n",buffer);
 
         if (buffer[0] == 'F') {
@@ -450,6 +450,139 @@ printk(KERN_INFO "EXIT\n");
 	unregister_chrdev(mycar_major, "mycar");
 	PWM_PWDUTY0 = 0;
 	PWM_PWDUTY1 = 0;
+	free_irq(IRQ_GPIO(IR_L),NULL);
+	free_irq(IRQ_GPIO(IR_R),NULL);
+	del_timer(irq_timer);
+	if(irq_timer)
+		kfree(irq_timer);
+	
+	del_timer(delay_timer);
+	if(delay_timer)
+		kfree(delay_timer);
+/*        del_timer(acceleration_timer);
+        if (acceleration_timer)
+                kfree(acceleration_timer);
+*/
+}
+int ll=0;lll=0;
+void del_func(unsigned long);
+void btn_func(unsigned long unused){
+	del_timer(irq_timer);
+r = pxa_gpio_get_value(IR_R);
+l = pxa_gpio_get_value(IR_L);
+int delay = 1;
+	if(!l && !r){
+	lll=ll;ll=0;
+                pxa_gpio_set_value(leds[0],0);
+                pxa_gpio_set_value(leds[1],1);
+                pxa_gpio_set_value(leds[2],1);
+                pxa_gpio_set_value(leds[3],0);
+	PWM_PWDUTY1 = LEVEL;PWM_PWDUTY0 = LEVEL;
+	delay = 50;
+	} else if(!l){
+                pxa_gpio_set_value(leds[0],0);
+                pxa_gpio_set_value(leds[1],1);
+                pxa_gpio_set_value(leds[2],0);
+                pxa_gpio_set_value(leds[3],1);
+		PWM_PWDUTY0 = LEVEL;PWM_PWDUTY1 = LEVEL;
+		delay = 100+ ll*200 + lll*300;
+		lll = ll; ll = 1;
+	//	msleep(100);
+	//	PWM_PWDUTY0 = LEVEL;
+	}else if(!r){
+                pxa_gpio_set_value(leds[0],1);
+                pxa_gpio_set_value(leds[1],0);
+                pxa_gpio_set_value(leds[2],1);
+                pxa_gpio_set_value(leds[3],0);
+		lll=ll;ll=0;
+		PWM_PWDUTY1 = LEVEL;PWM_PWDUTY0 = LEVEL;
+		delay = 50;
+	//	msleep(100);
+	//	PWM_PWDUTY0 = LEVEL;
+	}else{	
+		lll=ll;ll=0;
+		PWM_PWDUTY1 = 0;PWM_PWDUTY0 = 0;
+	}
+	//timer_running = 0;
+                setup_timer(delay_timer, del_func, 0);
+                mod_timer(delay_timer, jiffies + msecs_to_jiffies(delay));
+}
+
+void del_func(unsigned long unused){
+del_timer(delay_timer);
+		PWM_PWDUTY1 = 0;PWM_PWDUTY0 = 0;
+                setup_timer(irq_timer, btn_func, 0);
+                mod_timer(irq_timer, jiffies + msecs_to_jiffies(200));
+}
+
+irqreturn_t btnr_irq(int irq, void *dev_id, struct pt_regs *regs)
+{
+ //       int ret,l,r;
+        r = pxa_gpio_get_value(IR_R);
+	printk(KERN_ALERT "L: %d\n",l);
+        printk(KERN_ALERT "R: %d\n",r);
+	if(!timer_running){
+		PWM_PWDUTY1 = 0;PWM_PWDUTY0 = 0;
+                setup_timer(irq_timer, btn_func, 0);
+                mod_timer(irq_timer, jiffies + msecs_to_jiffies(100));
+                timer_running = 1;
+	}
+/*	if(r==0){
+		if(!isLeft){
+		PWM_PWDUTY1 = LEVEL_LINE;
+		isRight = 1;
+		}else{
+		cache_right = 1;
+		}
+	} else {
+		isRight = 0;
+		if(!isLeft){
+		PWM_PWDUTY1 = 0;
+		}else{
+		cache_right = 0;
+		}
+		if(cache_left){
+			PWM_PWDUTY0 = LEVEL_LINE;
+			cache_left = 0;
+		}
+	}
+*/
+	return IRQ_HANDLED;
+}
+irqreturn_t btnl_irq(int irq, void *dev_id, struct pt_regs *regs)
+{
+	
+ //       int ret,l,r;
+        l = pxa_gpio_get_value(IR_L);
+	printk(KERN_ALERT "L: %d\n",l);
+        printk(KERN_ALERT "R: %d\n",r);
+	if(!timer_running){ 
+		PWM_PWDUTY1 = 0;PWM_PWDUTY0 = 0;
+                setup_timer(irq_timer, btn_func, 0);
+                mod_timer(irq_timer, jiffies + msecs_to_jiffies(100));
+                timer_running = 1;
+	}
+/*	if(l==0){//if left white go left
+		if (!isRight){
+		PWM_PWDUTY0 = LEVEL_LINE;
+		isLeft = 1;
+		}else{
+		cache_left = 1;
+		}
+	} else {
+		isLeft = 0;
+		if (!isRight){
+		PWM_PWDUTY0 = 0;
+		}else{
+		cache_left =0;
+		}
+		if(cache_right){
+		PWM_PWDUTY1 = LEVEL_LINE;
+		cache_right = 0;
+		}
+	}
+*/
+	return IRQ_HANDLED;
 }
 static int __init mycar_init(void)
 {
@@ -495,6 +628,10 @@ static int __init mycar_init(void)
         pxa_gpio_set_value(LED1, 1);
         pxa_gpio_set_value(LED2, 1);
         pxa_gpio_set_value(LED3, 1);
+        gpio_direction_input(IR_L);
+        gpio_direction_input(IR_R);
+        pxa_gpio_mode(IR_L | GPIO_IN);
+        pxa_gpio_mode(IR_R | GPIO_IN);
 
 	PWM_CTRL0    = PWM_CR_MASK;                                 //Set Scaled Counter Clock
 	PWM_PWDUTY0 =  0;                         // Set Duty Cycle
@@ -514,6 +651,32 @@ static int __init mycar_init(void)
 	msleep(500);
 	PWM_PWDUTY0 = 0;
         PWM_PWDUTY1 = 0;
+
+/*      int irql = IRQ_GPIO(IR_L);
+        int irqr = IRQ_GPIO(IR_R);
+        
+        if (request_irq(irql, &btnl_irq, SA_INTERRUPT | SA_TRIGGER_RISING,// | SA_TRIGGER_FALLING,
+                                "mygpio", NULL) != 0 ) {
+                printk ( "irq not acquired \n" );
+                return -1;
+        }
+        if (request_irq(irqr, &btnr_irq, SA_INTERRUPT | SA_TRIGGER_RISING,// | SA_TRIGGER_FALLING,
+                                "mygpio", NULL) != 0 ) {
+                printk ( "irq not acquired \n" );
+                return -1;
+        }
+*/
+
+	irq_timer = (struct timer_list *) kmalloc(sizeof(struct timer_list), GFP_KERNEL);
+	delay_timer = (struct timer_list *) kmalloc(sizeof(struct timer_list), GFP_KERNEL);
+	if (!irq_timer || !delay_timer)
+        {
+                printk(KERN_ALERT "Insufficient kernel memory\n");
+                result = -ENOMEM;
+                goto fail;
+        }
+                setup_timer(irq_timer, btn_func, 0);
+                mod_timer(irq_timer, jiffies + msecs_to_jiffies(500));
 	return 0;
 fail: 
 	mycar_exit();
