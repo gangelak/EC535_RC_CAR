@@ -6,11 +6,11 @@
 #include <signal.h>
 
 /*Bluetooth file - rfcomm0*/
-int bl_file;
+int bl_file = -1;
 /*Remote controlled module file - mycar*/
-int car_file;
+int car_file = -1;
 /*Self navigating module file - autocar*/
-int auto_file;
+int auto_file = -1;
 /*Flag to indicate if we are in the self driving module*/
 int auto_mode = 0;
 
@@ -38,7 +38,7 @@ int main (int argc, char *argv){
 
 	while (1){
 		
-		if( access( "/dev/rfcomm0", F_OK ) == -1 ) {
+		if( bl_file == -1 ) {
 			bl_file = open("/dev/rfcomm0",O_RDONLY);
 			
 			if (bl_file == -1){
@@ -48,7 +48,7 @@ int main (int argc, char *argv){
     			
 		}
 		
-		if( access( "/dev/mycar", F_OK ) == -1 ) {
+		if( car_file == -1 ) {
 			car_file = open("/dev/mycar",O_RDWR);
 			
 			if (car_file == -1){
@@ -58,7 +58,7 @@ int main (int argc, char *argv){
     			
 		}
 		
-		if( access( "/dev/autocar", F_OK ) == -1 ) {
+		if( auto_file == -1 ) {
 			auto_file = open("/dev/autocar",O_RDWR);
 			
 			if (auto_file == -1){
@@ -71,7 +71,8 @@ int main (int argc, char *argv){
 		int i;
 		// Transfer data character by character
 		memset(line,'\0',256);
-		while(i = (read(bl_file,line,256)) != 0){
+		i = read(bl_file,line,256);
+		while(i != 0 && i != -1){
 			//Initiate self driving mode
 			if (line[0] == 'N'){
 				write(auto_file,line,1);
@@ -92,6 +93,7 @@ int main (int argc, char *argv){
 					memset(line,'\0',256);
 				}
 			}
+			i = read(bl_file,line,256);
 		}
 	}
 	
