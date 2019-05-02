@@ -49,9 +49,9 @@ int main (int argc, char *argv){
 		}
 		
 		if( access( "/dev/mycar", F_OK ) == -1 ) {
-			bl_file = open("/dev/mycar",O_RDWR);
+			car_file = open("/dev/mycar",O_RDWR);
 			
-			if (bl_file == -1){
+			if (car_file == -1){
 				printf("Something is wrong with the car kernel module\n");
 				continue;
 			}
