@@ -80,7 +80,7 @@ int main (int argc, char *argv){
 				auto_mode = 1;
 				
 			}
-			else if (line[0] == 'B'){
+			else if (line[0] == 'Z'){
 				write(auto_file,line,1);
 				memset(line,'\0',256);
 				auto_mode = 0;
