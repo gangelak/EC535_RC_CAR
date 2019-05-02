@@ -36,9 +36,6 @@ static ssize_t mycar_read(struct file *filp,
 		char *buf, size_t count, loff_t *f_pos);
 static ssize_t mycar_write(struct file *filp,
 		const char *buf, size_t count, loff_t *f_pos);
-irqreturn_t btnr_irq(int irq, void *dev_id, struct pt_regs *regs);
-irqreturn_t btnl_irq(int irq, void *dev_id, struct pt_regs *regs);
-void btn_func(unsigned long);
 /* Structure that declares the usual file */
 /* access functions */
 struct file_operations mycar_fops = {
@@ -49,8 +46,10 @@ struct file_operations mycar_fops = {
 };
 
 /* Major number */
-static int mycar_major = 61;
+static int mycar_major = 62;
 static char *buffer;
+int ll=0;int lll=0;int rr=0;int rrr=0;
+void del_func(unsigned long);
 // timer used to gradually slow down/speed up
 //static struct timer_list * acceleration_timer;
 int times_read = 0;
@@ -87,13 +86,6 @@ static struct timer_list * delay_timer;
 #define HALF 200
 int leds[4] = {28,29,30,31};
 
-//#define MYGPIO 101
-//volatile int pwm0 = 0;
-//volatile int pwm1 = 0;
-//int accel_period = 5;
-//int accel_steps = 5;
-//volatile int remaining_steps = 0;
-
 short duty[3] = {32,128,1024};
 
 static int mycar_open(struct inode *inode, struct file *filp)
@@ -102,133 +94,15 @@ printk(KERN_INFO "OPEN\n");
 	/* Success */
 	return 0;
 }
-/*
-static void timer_handler(unsigned long data) {
-	if (remaining_steps > 0){
-        PWM_PWDUTY0 -= pwm0;
-        PWM_PWDUTY1 -= pwm1;
-        del_timer(acceleration_timer);
-        setup_timer(acceleration_timer, timer_handler, 0);
-        mod_timer(acceleration_timer, jiffies + msecs_to_jiffies(accel_period));
-	remaining_steps --;
-	} else {
-	PWM_PWDUTY0 = 0;
-	PWM_PWDUTY1 = 0;
-	}
-}*/
+
 
 static int mycar_release(struct inode *inode, struct file *filp)
 {
 	/* Success */
 	return 0;
 }
-/*
-void set_accel_timer(){
-	setup_timer(acceleration_timer, timer_handler, 0);
-        mod_timer(acceleration_timer, jiffies + msecs_to_jiffies(accel_period));
-}*/
-#define STEP (100)
-#define ABS(x)  ((x<0)?-x:x)
-// C = A % B is equivalent to C = A – B * (A / B)
-#define MODULO(A,B) (A-B*(A/B))
-#if (MODULO(LEVEL,STEP)!=0 || MODULO(HALF,STEP)!=0)
-  #error "level/step must be multiple of level"
-#endif
-#if (LEVEL==0 || HALF==0)
-  #error "LEVEL/HALF cant be zero"
-#endif
-int m0 = 0;
-int m1 = 0;
-int dir = 1;
-void back(int * ref_motor){
-		int motor = *ref_motor;
-                if (motor>STEP){
-                motor -= STEP;
-                dir = 1;
-                }
-                else if(motor==STEP){//zero
-                motor -= STEP;
-                dir = 0;
-                }else if(motor>-LEVEL && motor<=STEP){
-                motor -= STEP;
-                dir = 0;
-                }
-		*ref_motor = motor;
-}
-void front(int * ref_motor){
-		int motor = *ref_motor;
-                if (motor<0){
-                dir = 0;
-                motor += STEP;
-                } else if (motor < LEVEL && motor>0){
-                motor += STEP;
-                dir = 1;
-                }else if (motor==0){
-                dir = 1;
-                motor += STEP;
-                }
-		*ref_motor = motor;
-}
-void turn(int *ref_turn_motr, int *ref_stop_motr){
-		int turn_motr = *ref_turn_motr;
-		int stop_motr = *ref_stop_motr;
-                if(stop_motr<0){
-                stop_motr += STEP;
-                }else if (stop_motr>0){
-                stop_motr -= STEP;
-                }
-                if (turn_motr < LEVEL){
-                turn_motr += STEP;
-                }else if(turn_motr ==0){
-                turn_motr += STEP;
-                dir = 1;
-                }
-		*ref_turn_motr = turn_motr;
-		*ref_stop_motr = stop_motr;
-}
-void half_turn_front(int *ref_turn_motr, int *ref_half_motr){
-                int turn_motr = *ref_turn_motr;
-                int half_motr = *ref_half_motr;
-                if (half_motr < HALF){
-                half_motr += STEP;
-                }else if(half_motr ==0){
-                half_motr += STEP;
-                dir = 1;
-                }else if(half_motr >HALF){
-		half_motr -= STEP;
-		}
-                if (turn_motr < LEVEL){
-                turn_motr += STEP;
-                }else if(turn_motr ==0){
-                turn_motr += STEP;
-                dir = 1;
-                }
-                *ref_turn_motr = turn_motr;
-                *ref_half_motr = half_motr;
-}
-void half_turn_back(int *ref_turn_motr, int *ref_half_motr){
-                int turn_motr = *ref_turn_motr;
-                int half_motr = *ref_half_motr;
-                if (half_motr > STEP){
-		half_motr -= STEP;
-		}else if(half_motr ==STEP){
-                half_motr -= STEP;
-                dir = 0;
-                }else if (half_motr > HALF){
-                half_motr -= STEP;
-                }else if(half_motr < HALF){
-                half_motr += STEP;
-                }
-                if (turn_motr > -LEVEL){
-                turn_motr -= STEP;
-                }else if(turn_motr ==STEP){
-                turn_motr -= STEP;
-                dir = 0;
-                }
-                *ref_turn_motr = turn_motr;
-                *ref_half_motr = half_motr;
-}
 
+int active = 0;
 static ssize_t mycar_write(struct file *filp, const char *buf,
 							size_t count, loff_t *f_pos)
 {
@@ -239,201 +113,26 @@ static ssize_t mycar_write(struct file *filp, const char *buf,
 		printk(KERN_INFO "Copy from user failed\n");
 		return -EFAULT;
 	}
-#if 0
-	printk(KERN_INFO "write %s\n",buffer);
 
-        if (buffer[0] == 'F') {
-		printk(KERN_INFO "F-\n");
-		front(&m0);
-		front(&m1);
+	printk(KERN_INFO "write_auto %s %d\n",buffer,active);
+
+        if (buffer[0] == 'N') {
+		printk(KERN_INFO "N-\n");
+		active = 1;
+	}else if (buffer[0] == 'Z'){
+		printk(KERN_INFO "Z-\n");
+		active = 0;
+                PWM_PWDUTY0 = 0;   
+                PWM_PWDUTY1 = 0;
 	} 
-     else if (buffer[0] == 'Q') {
-                printk(KERN_INFO "Q-\n");
-		half_turn_front(&m1,&m0);
-		//PWM_PWDUTY0 = HALF;	
-		//PWM_PWDUTY1 = LEVEL;
-        } 
-        else if (buffer[0] == 'E') {
-                printk(KERN_INFO "E-\n");
-		//dir = 1;
-                //PWM_PWDUTY0 = LEVEL;
-		//PWM_PWDUTY1 = HALF; 
-		half_turn_front(&m0,&m1);
-       }
-	else if (buffer[0] == 'B') {
-		printk(KERN_INFO "B-\n"); 
-		//dir = 0;
-		/*if (m0>0){
-		m0 -= STEP;
-		dir = 1;
-		}
-		else if(m0==1){//zero
-		m0 -= STEP;
-		dir = 0;
-		}else if(m0>-LEVEL && m0<=0){
-                m0 -= STEP;
-                dir = 0;
-                }*/
-		back(&m0);
-		back(&m1);
-        
-	        /*if (m1>0){
-                m1 -= STEP;
-		dir = 1;
-                }
-                else if(m1>-LEVEL && m1<0){
-                m1 -= STEP;
-		dir = 0;
-                }else if(m1 ==0){//zero
-                m1 -= STEP;
-                dir = 0;
-                }*/
-		//PWM_PWDUTY0 = ABS(m0);
-		//PWM_PWDUTY1 = ABS(m1);
-        }
-        else if (buffer[0] == 'A') {
-                printk(KERN_INFO "A-\n");
-		//dir = 0;
-                //PWM_PWDUTY0 = HALF;
-		//PWM_PWDUTY1 = LEVEL;
-		half_turn_back(&m1,&m0);
-        }
-        else if (buffer[0] == 'D') {
-                printk(KERN_INFO "D-\n");
-		//dir = 0;
-                //PWM_PWDUTY0 = LEVEL;
-		//PWM_PWDUTY1 = HALF;
-		half_turn_back(&m0,&m1);
-        }
-	else if (buffer[0] == 'L'){
-		printk(KERN_INFO "L-\n");
-		//dir = 1;
-               
-		turn(&m1,&m0);
-/* 
-		if(m0<0){
-		m0 += STEP;
-		}else if (m0>0){//zero
-                m0 -= STEP;
-                }
-                if (m1 < LEVEL){
-                m1 += STEP;
-                }else if(m1 ==0){
-		m1 += STEP;
-		dir = 1;
-		}
-*/  
-      }
-	
-	else if (buffer[0] == 'R'){
-        	printk(KERN_INFO "R-\n");  
-		//dir = 1;
-		turn(&m0,&m1);
-/*                if (m0 < LEVEL){
-                m0 += STEP;
-                //l_PWDUTY0 = ABS(m0);
-                }else if(m0 ==0){
-                m0 += STEP;
-                dir = 1;
-                }
-	
-                if (m1>0){
-                m1 -= STEP; 
-	       }else if (m1<0){
-                m1 += STEP;
-                }
-*/  
-              //M_PWDUTY1 = m1;
-	}
 
-	else if (buffer[0] == 'S'){
-		printk(KERN_INFO "S-\n"); 
-		//dir = 1;
-//PWM_PWDUTY0 = 0;
-//PWM_PWDUTY1 = 1;
-		if (m0>0){ 
-		m0 -= STEP;
-		}else if(m0<0){
-		m0 += STEP;
-		}
-		//PWM_PWDUTY0 = ABS(m0);
-		if (m1>0){
-		m1 -= STEP;
-		}else if(m1<0){
-		m1 += STEP;
-		}
-		//PWM_PWDUTY1 = ABS(m1);
-
-	/*	if (PWM_PWDUTY0 >= HALF || PWM_PWDUTY1 >= HALF){
-		remaining_steps = accel_steps;
-		pwm0 = PWM_PWDUTY0/accel_steps;
-		pwm1 = PWM_PWDUTY1/accel_steps;
-		set_accel_timer();
-		}
-	*/
-	}
-	
-	else {
-          	printk(KERN_INFO "Incorrect usage\n");
-        }
-/*
-	if (buffer[0]!='S'){
-		remaining_steps = 0;
-		del_timer(acceleration_timer);
-	}
-*/	
-	if (dir) {
-          	pxa_gpio_set_value(leds[0],0);
-          	pxa_gpio_set_value(leds[1],1);
- 		pxa_gpio_set_value(leds[2],1);
-                pxa_gpio_set_value(leds[3],0);
-	} else {
-                pxa_gpio_set_value(leds[0],1);
-                pxa_gpio_set_value(leds[1],0);
-		pxa_gpio_set_value(leds[2],0);
-                pxa_gpio_set_value(leds[3],1);
-	}
-	printk(KERN_ALERT "m0: %d\n",m0);
-	printk(KERN_ALERT "m1: %d\n",m1);
-                PWM_PWDUTY1 = ABS(m1);
-                PWM_PWDUTY0 = ABS(m0);
-#endif
 	int l,r;l=0,r=0;
-/*if(1){
-	while (l==0 || r==0)//while sensors see white
-	{
-        l = pxa_gpio_get_value(IR_L);
-        r = pxa_gpio_get_value(IR_R);
-	printk(KERN_ALERT "L: %d\n",l);
-        printk(KERN_ALERT "R: %d\n",r);
-	if(l==0)//if left white go left
-		PWM_PWDUTY0 = LEVEL;
-	if(r==0)
-		PWM_PWDUTY1 = LEVEL;
-	}
-	}
-*/	
+
 	return count;
 }
 static ssize_t mycar_read(struct file *filp, char *buf, 
 							size_t count, loff_t *f_pos)
 {
-	/*char tbuf[256], *tbptr;*/
-	/*tbptr = tbuf;*/
-	/*memset(tbptr,'\0',256);*/
-	/*if (times_read == 0){*/
-		/*tbptr += sprintf(tbptr,"%d %5c %8s %5s %6c\n", counter, speed, cnt ? "Count" : "Hold", dir ? "Up" : "Down", brightness[global] );*/
-		/*times_read++;*/
-	/*}		*/
-	/*else{*/
-		/*times_read = 0;	*/
-	/*}*/
-	/*if (copy_to_user(buf, tbuf, sizeof(tbuf)))*/
-	/*{*/
-		/*printk(KERN_INFO "fault transfering data to user 216\n");*/
-		/*return -EFAULT;*/
-	/*}*/
-	/*count = strlen(tbuf);*/
 	return count;
 }
 
@@ -447,7 +146,7 @@ printk(KERN_INFO "EXIT\n");
 		kfree(buffer);
 	}
 	/* Freeing the major number */
-	unregister_chrdev(mycar_major, "mycar");
+	unregister_chrdev(mycar_major, "autocar");
 	PWM_PWDUTY0 = 0;
 	PWM_PWDUTY1 = 0;
 	free_irq(IRQ_GPIO(IR_L),NULL);
@@ -459,131 +158,59 @@ printk(KERN_INFO "EXIT\n");
 	del_timer(delay_timer);
 	if(delay_timer)
 		kfree(delay_timer);
-/*        del_timer(acceleration_timer);
-        if (acceleration_timer)
-                kfree(acceleration_timer);
-*/
+
 }
-int ll=0;lll=0;
-void del_func(unsigned long);
+
 void btn_func(unsigned long unused){
 	del_timer(irq_timer);
-r = pxa_gpio_get_value(IR_R);
-l = pxa_gpio_get_value(IR_L);
-int delay = 1;
+	r = pxa_gpio_get_value(IR_R);
+	l = pxa_gpio_get_value(IR_L);
+	int delay = 1;
+	if(active){
 	if(!l && !r){
-	lll=ll;ll=0;
-                pxa_gpio_set_value(leds[0],0);
-                pxa_gpio_set_value(leds[1],1);
-                pxa_gpio_set_value(leds[2],1);
-                pxa_gpio_set_value(leds[3],0);
-	PWM_PWDUTY1 = LEVEL;PWM_PWDUTY0 = LEVEL;
-	delay = 50;
-	} else if(!l){
+	lll=ll;ll=0;rrr=rr;rr=0;
                 pxa_gpio_set_value(leds[0],0);
                 pxa_gpio_set_value(leds[1],1);
                 pxa_gpio_set_value(leds[2],0);
                 pxa_gpio_set_value(leds[3],1);
+		PWM_PWDUTY1 = LEVEL;PWM_PWDUTY0 = LEVEL;
+	delay = 50;
+	} else if(!l){
+                pxa_gpio_set_value(leds[0],0);
+                pxa_gpio_set_value(leds[1],1);
+                pxa_gpio_set_value(leds[2],1);
+                pxa_gpio_set_value(leds[3],0);
 		PWM_PWDUTY0 = LEVEL;PWM_PWDUTY1 = LEVEL;
-		delay = 100+ ll*200 + lll*300;
+		delay = 42+ ll*42 + lll*42;
 		lll = ll; ll = 1;
-	//	msleep(100);
-	//	PWM_PWDUTY0 = LEVEL;
+		rrr=rr;rr=0;
 	}else if(!r){
                 pxa_gpio_set_value(leds[0],1);
                 pxa_gpio_set_value(leds[1],0);
-                pxa_gpio_set_value(leds[2],1);
-                pxa_gpio_set_value(leds[3],0);
+                pxa_gpio_set_value(leds[2],0);
+                pxa_gpio_set_value(leds[3],1);
 		lll=ll;ll=0;
+		rrr=rr;rr=1;
 		PWM_PWDUTY1 = LEVEL;PWM_PWDUTY0 = LEVEL;
-		delay = 50;
-	//	msleep(100);
-	//	PWM_PWDUTY0 = LEVEL;
+		delay = 42+ rr*42 + rrr*42;
 	}else{	
-		lll=ll;ll=0;
+		lll=ll;ll=0;rrr=rr;rr=0;
 		PWM_PWDUTY1 = 0;PWM_PWDUTY0 = 0;
 	}
-	//timer_running = 0;
+	}
                 setup_timer(delay_timer, del_func, 0);
                 mod_timer(delay_timer, jiffies + msecs_to_jiffies(delay));
 }
 
 void del_func(unsigned long unused){
 del_timer(delay_timer);
-		PWM_PWDUTY1 = 0;PWM_PWDUTY0 = 0;
+		if(active){
+			PWM_PWDUTY1 = 0;PWM_PWDUTY0 = 0;
+		}
                 setup_timer(irq_timer, btn_func, 0);
                 mod_timer(irq_timer, jiffies + msecs_to_jiffies(200));
 }
 
-irqreturn_t btnr_irq(int irq, void *dev_id, struct pt_regs *regs)
-{
- //       int ret,l,r;
-        r = pxa_gpio_get_value(IR_R);
-	printk(KERN_ALERT "L: %d\n",l);
-        printk(KERN_ALERT "R: %d\n",r);
-	if(!timer_running){
-		PWM_PWDUTY1 = 0;PWM_PWDUTY0 = 0;
-                setup_timer(irq_timer, btn_func, 0);
-                mod_timer(irq_timer, jiffies + msecs_to_jiffies(100));
-                timer_running = 1;
-	}
-/*	if(r==0){
-		if(!isLeft){
-		PWM_PWDUTY1 = LEVEL_LINE;
-		isRight = 1;
-		}else{
-		cache_right = 1;
-		}
-	} else {
-		isRight = 0;
-		if(!isLeft){
-		PWM_PWDUTY1 = 0;
-		}else{
-		cache_right = 0;
-		}
-		if(cache_left){
-			PWM_PWDUTY0 = LEVEL_LINE;
-			cache_left = 0;
-		}
-	}
-*/
-	return IRQ_HANDLED;
-}
-irqreturn_t btnl_irq(int irq, void *dev_id, struct pt_regs *regs)
-{
-	
- //       int ret,l,r;
-        l = pxa_gpio_get_value(IR_L);
-	printk(KERN_ALERT "L: %d\n",l);
-        printk(KERN_ALERT "R: %d\n",r);
-	if(!timer_running){ 
-		PWM_PWDUTY1 = 0;PWM_PWDUTY0 = 0;
-                setup_timer(irq_timer, btn_func, 0);
-                mod_timer(irq_timer, jiffies + msecs_to_jiffies(100));
-                timer_running = 1;
-	}
-/*	if(l==0){//if left white go left
-		if (!isRight){
-		PWM_PWDUTY0 = LEVEL_LINE;
-		isLeft = 1;
-		}else{
-		cache_left = 1;
-		}
-	} else {
-		isLeft = 0;
-		if (!isRight){
-		PWM_PWDUTY0 = 0;
-		}else{
-		cache_left =0;
-		}
-		if(cache_right){
-		PWM_PWDUTY1 = LEVEL_LINE;
-		cache_right = 0;
-		}
-	}
-*/
-	return IRQ_HANDLED;
-}
 static int __init mycar_init(void)
 {
 	int result;
@@ -597,20 +224,12 @@ static int __init mycar_init(void)
 		goto fail; 
 	} 
 	memset(buffer, 0, 256);
-/*	acceleration_timer = (struct timer_list *) kmalloc(sizeof(struct timer_list), GFP_KERNEL);
-        if (!acceleration_timer)
-        {
-                printk(KERN_ALERT "Timer creation failed\n");
-                result = -ENOMEM;
-                goto fail;
-        }
-*/
 	/* Registering device */
-	result = register_chrdev(mycar_major, "mycar", &mycar_fops);
+	result = register_chrdev(mycar_major, "autocar", &mycar_fops);
 	if (result < 0)
 	{
 		printk(KERN_ALERT
-			"my_car: cannot obtain major number %d\n", mycar_major);
+			"autocar: cannot obtain major number %d\n", mycar_major);
 		return result;
 	}
 	
@@ -651,21 +270,6 @@ static int __init mycar_init(void)
 	msleep(500);
 	PWM_PWDUTY0 = 0;
         PWM_PWDUTY1 = 0;
-
-/*      int irql = IRQ_GPIO(IR_L);
-        int irqr = IRQ_GPIO(IR_R);
-        
-        if (request_irq(irql, &btnl_irq, SA_INTERRUPT | SA_TRIGGER_RISING,// | SA_TRIGGER_FALLING,
-                                "mygpio", NULL) != 0 ) {
-                printk ( "irq not acquired \n" );
-                return -1;
-        }
-        if (request_irq(irqr, &btnr_irq, SA_INTERRUPT | SA_TRIGGER_RISING,// | SA_TRIGGER_FALLING,
-                                "mygpio", NULL) != 0 ) {
-                printk ( "irq not acquired \n" );
-                return -1;
-        }
-*/
 
 	irq_timer = (struct timer_list *) kmalloc(sizeof(struct timer_list), GFP_KERNEL);
 	delay_timer = (struct timer_list *) kmalloc(sizeof(struct timer_list), GFP_KERNEL);

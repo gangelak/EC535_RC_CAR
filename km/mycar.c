@@ -51,8 +51,6 @@ struct file_operations mycar_fops = {
 /* Major number */
 static int mycar_major = 61;
 static char *buffer;
-// timer used to gradually slow down/speed up
-//static struct timer_list * acceleration_timer;
 int times_read = 0;
 
 char seconds[5];
@@ -83,17 +81,9 @@ int l=0,r=0;
 #define PWM_CR_MASK 0x3F               //0x3F is the largest value allowed for the PWM_CTR register
 #define PWM_DCR_MASK 0xD7          //0x3FF is the largest value allowed for the PWM_PWDUTY register
 #define PWM_PCR_MASK    0x3FF       //0x3FF is the largest value allowed for the PWM_PERVAL register 
-#define LEVEL 400
+#define LEVEL 500
 #define HALF 200
 int leds[4] = {28,29,30,31};
-
-//#define MYGPIO 101
-//volatile int pwm0 = 0;
-//volatile int pwm1 = 0;
-//int accel_period = 5;
-//int accel_steps = 5;
-//volatile int remaining_steps = 0;
-
 short duty[3] = {32,128,1024};
 
 static int mycar_open(struct inode *inode, struct file *filp)
@@ -102,31 +92,13 @@ printk(KERN_INFO "OPEN\n");
 	/* Success */
 	return 0;
 }
-/*
-static void timer_handler(unsigned long data) {
-	if (remaining_steps > 0){
-        PWM_PWDUTY0 -= pwm0;
-        PWM_PWDUTY1 -= pwm1;
-        del_timer(acceleration_timer);
-        setup_timer(acceleration_timer, timer_handler, 0);
-        mod_timer(acceleration_timer, jiffies + msecs_to_jiffies(accel_period));
-	remaining_steps --;
-	} else {
-	PWM_PWDUTY0 = 0;
-	PWM_PWDUTY1 = 0;
-	}
-}*/
 
 static int mycar_release(struct inode *inode, struct file *filp)
 {
 	/* Success */
 	return 0;
 }
-/*
-void set_accel_timer(){
-	setup_timer(acceleration_timer, timer_handler, 0);
-        mod_timer(acceleration_timer, jiffies + msecs_to_jiffies(accel_period));
-}*/
+
 #define STEP (100)
 #define ABS(x)  ((x<0)?-x:x)
 // C = A % B is equivalent to C = A – B * (A / B)
@@ -144,7 +116,7 @@ void back(int * ref_motor){
 		int motor = *ref_motor;
                 if (motor>STEP){
                 motor -= STEP;
-                dir = 1;
+                dir = 0;
                 }
                 else if(motor==STEP){//zero
                 motor -= STEP;
@@ -158,7 +130,7 @@ void back(int * ref_motor){
 void front(int * ref_motor){
 		int motor = *ref_motor;
                 if (motor<0){
-                dir = 0;
+                dir = 1;
                 motor += STEP;
                 } else if (motor < LEVEL && motor>0){
                 motor += STEP;
@@ -209,19 +181,19 @@ void half_turn_front(int *ref_turn_motr, int *ref_half_motr){
 void half_turn_back(int *ref_turn_motr, int *ref_half_motr){
                 int turn_motr = *ref_turn_motr;
                 int half_motr = *ref_half_motr;
-                if (half_motr > STEP){
-		half_motr -= STEP;
-		}else if(half_motr ==STEP){
+
+                if (half_motr > -HALF){
+                half_motr -= STEP;
+                }else if(half_motr ==0){
                 half_motr -= STEP;
                 dir = 0;
-                }else if (half_motr > HALF){
-                half_motr -= STEP;
-                }else if(half_motr < HALF){
-                half_motr += STEP;
-                }
+                }else if(half_motr < -HALF){
+		half_motr += STEP;
+		}
+		
                 if (turn_motr > -LEVEL){
                 turn_motr -= STEP;
-                }else if(turn_motr ==STEP){
+                }else if(turn_motr == 0){
                 turn_motr -= STEP;
                 dir = 0;
                 }
@@ -250,148 +222,62 @@ static ssize_t mycar_write(struct file *filp, const char *buf,
      else if (buffer[0] == 'Q') {
                 printk(KERN_INFO "Q-\n");
 		half_turn_front(&m1,&m0);
-		//PWM_PWDUTY0 = HALF;	
-		//PWM_PWDUTY1 = LEVEL;
         } 
         else if (buffer[0] == 'E') {
                 printk(KERN_INFO "E-\n");
-		//dir = 1;
-                //PWM_PWDUTY0 = LEVEL;
-		//PWM_PWDUTY1 = HALF; 
 		half_turn_front(&m0,&m1);
        }
 	else if (buffer[0] == 'B') {
 		printk(KERN_INFO "B-\n"); 
-		//dir = 0;
-		/*if (m0>0){
-		m0 -= STEP;
-		dir = 1;
-		}
-		else if(m0==1){//zero
-		m0 -= STEP;
-		dir = 0;
-		}else if(m0>-LEVEL && m0<=0){
-                m0 -= STEP;
-                dir = 0;
-                }*/
 		back(&m0);
 		back(&m1);
-        
-	        /*if (m1>0){
-                m1 -= STEP;
-		dir = 1;
-                }
-                else if(m1>-LEVEL && m1<0){
-                m1 -= STEP;
-		dir = 0;
-                }else if(m1 ==0){//zero
-                m1 -= STEP;
-                dir = 0;
-                }*/
-		//PWM_PWDUTY0 = ABS(m0);
-		//PWM_PWDUTY1 = ABS(m1);
         }
         else if (buffer[0] == 'A') {
                 printk(KERN_INFO "A-\n");
-		//dir = 0;
-                //PWM_PWDUTY0 = HALF;
-		//PWM_PWDUTY1 = LEVEL;
 		half_turn_back(&m1,&m0);
         }
         else if (buffer[0] == 'D') {
                 printk(KERN_INFO "D-\n");
-		//dir = 0;
-                //PWM_PWDUTY0 = LEVEL;
-		//PWM_PWDUTY1 = HALF;
 		half_turn_back(&m0,&m1);
         }
 	else if (buffer[0] == 'L'){
 		printk(KERN_INFO "L-\n");
-		//dir = 1;
-               
 		turn(&m1,&m0);
-/* 
-		if(m0<0){
-		m0 += STEP;
-		}else if (m0>0){//zero
-                m0 -= STEP;
-                }
-                if (m1 < LEVEL){
-                m1 += STEP;
-                }else if(m1 ==0){
-		m1 += STEP;
-		dir = 1;
-		}
-*/  
       }
 	
 	else if (buffer[0] == 'R'){
         	printk(KERN_INFO "R-\n");  
-		//dir = 1;
 		turn(&m0,&m1);
-/*                if (m0 < LEVEL){
-                m0 += STEP;
-                //l_PWDUTY0 = ABS(m0);
-                }else if(m0 ==0){
-                m0 += STEP;
-                dir = 1;
-                }
-	
-                if (m1>0){
-                m1 -= STEP; 
-	       }else if (m1<0){
-                m1 += STEP;
-                }
-*/  
-              //M_PWDUTY1 = m1;
 	}
 
 	else if (buffer[0] == 'S'){
 		printk(KERN_INFO "S-\n"); 
-		//dir = 1;
-//PWM_PWDUTY0 = 0;
-//PWM_PWDUTY1 = 1;
 		if (m0>0){ 
 		m0 -= STEP;
 		}else if(m0<0){
 		m0 += STEP;
 		}
-		//PWM_PWDUTY0 = ABS(m0);
 		if (m1>0){
 		m1 -= STEP;
 		}else if(m1<0){
 		m1 += STEP;
 		}
-		//PWM_PWDUTY1 = ABS(m1);
-
-	/*	if (PWM_PWDUTY0 >= HALF || PWM_PWDUTY1 >= HALF){
-		remaining_steps = accel_steps;
-		pwm0 = PWM_PWDUTY0/accel_steps;
-		pwm1 = PWM_PWDUTY1/accel_steps;
-		set_accel_timer();
-		}
-	*/
 	}
 	
 	else {
           	printk(KERN_INFO "Incorrect usage\n");
         }
-/*
-	if (buffer[0]!='S'){
-		remaining_steps = 0;
-		del_timer(acceleration_timer);
-	}
-*/	
+
 	if (dir) {
           	pxa_gpio_set_value(leds[0],0);
           	pxa_gpio_set_value(leds[1],1);
- 		pxa_gpio_set_value(leds[2],1);
-                pxa_gpio_set_value(leds[3],0);
+ 		pxa_gpio_set_value(leds[2],0);
+                pxa_gpio_set_value(leds[3],1);
 	} else {
                 pxa_gpio_set_value(leds[0],1);
                 pxa_gpio_set_value(leds[1],0);
-		pxa_gpio_set_value(leds[2],0);
-                pxa_gpio_set_value(leds[3],1);
+		pxa_gpio_set_value(leds[2],1);
+                pxa_gpio_set_value(leds[3],0);
 	}
 	printk(KERN_ALERT "m0: %d\n",m0);
 	printk(KERN_ALERT "m1: %d\n",m1);
@@ -399,41 +285,11 @@ static ssize_t mycar_write(struct file *filp, const char *buf,
                 PWM_PWDUTY0 = ABS(m0);
 #endif
 	int l,r;l=0,r=0;
-/*if(1){
-	while (l==0 || r==0)//while sensors see white
-	{
-        l = pxa_gpio_get_value(IR_L);
-        r = pxa_gpio_get_value(IR_R);
-	printk(KERN_ALERT "L: %d\n",l);
-        printk(KERN_ALERT "R: %d\n",r);
-	if(l==0)//if left white go left
-		PWM_PWDUTY0 = LEVEL;
-	if(r==0)
-		PWM_PWDUTY1 = LEVEL;
-	}
-	}
-*/	
 	return count;
 }
 static ssize_t mycar_read(struct file *filp, char *buf, 
 							size_t count, loff_t *f_pos)
 {
-	/*char tbuf[256], *tbptr;*/
-	/*tbptr = tbuf;*/
-	/*memset(tbptr,'\0',256);*/
-	/*if (times_read == 0){*/
-		/*tbptr += sprintf(tbptr,"%d %5c %8s %5s %6c\n", counter, speed, cnt ? "Count" : "Hold", dir ? "Up" : "Down", brightness[global] );*/
-		/*times_read++;*/
-	/*}		*/
-	/*else{*/
-		/*times_read = 0;	*/
-	/*}*/
-	/*if (copy_to_user(buf, tbuf, sizeof(tbuf)))*/
-	/*{*/
-		/*printk(KERN_INFO "fault transfering data to user 216\n");*/
-		/*return -EFAULT;*/
-	/*}*/
-	/*count = strlen(tbuf);*/
 	return count;
 }
 
@@ -464,14 +320,6 @@ static int __init mycar_init(void)
 		goto fail; 
 	} 
 	memset(buffer, 0, 256);
-/*	acceleration_timer = (struct timer_list *) kmalloc(sizeof(struct timer_list), GFP_KERNEL);
-        if (!acceleration_timer)
-        {
-                printk(KERN_ALERT "Timer creation failed\n");
-                result = -ENOMEM;
-                goto fail;
-        }
-*/
 	/* Registering device */
 	result = register_chrdev(mycar_major, "mycar", &mycar_fops);
 	if (result < 0)
