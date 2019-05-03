@@ -6,10 +6,10 @@ And make sure to disable the UART flow control and set the parameters to 8n1 (8b
 
 Currently, to use the remote control vehicle we must do the following in the Gumstix:
 
-*mknod /dev/mycar c 61 0
-*mknod /dev/mycar_auto c 62 0
-*insmod mycar.ko
-*insmod mycar_auto.ko
+- mknod /dev/mycar c 61 0
+- mknod /dev/mycar_auto c 62 0
+- insmod mycar.ko
+- insmod mycar_auto.ko
 
 At this point the connect the Android application to the bluetooth kernel module. Do this by selecting the 'Gumstix' entry in the list of scanned nearby Bluetooth devices (Figure below).
 
