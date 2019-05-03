@@ -71,8 +71,8 @@ static ssize_t mycar_write(struct file *filp,
 #endif
 
 
-int motor_l = 0; //Current PWM level of left motor
-int motor_r = 0; //Current PWM level of right motor
+int m0 = 0; //Current PWM level of left motor
+int m1 = 0; //Current PWM level of right motor
 int dir = 1;     //Direction of the two motors
 
 /* Structure that declares the usual file */
