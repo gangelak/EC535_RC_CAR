@@ -16,7 +16,7 @@ At this point the connect the Android application to the bluetooth kernel module
 ![](images/ec535_app_main.png)
 
 Finally, run the user level helper progrgram on the Gumstix.
-./get_data
+- ./get_data
 
 This setup process is unfortunately manual, and can be automated as part of an init script.
 
